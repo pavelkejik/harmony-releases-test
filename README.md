@@ -21,11 +21,17 @@ sha256sum harmony-X.Y.Z.tar.gz   # must equal artifact.sha256 in the manifest
 
 ## Publishing
 
-Actions → **Publish release** → version + sha256 of the candidate tested on the lab.
-The workflow runs in the protected `production` environment (main only), downloads
-the candidate from the source repo, checks the sha256, signs the manifest and
-creates the release. Published releases are never replaced; a newer version is
-the only way forward.
+1. **Publish candidate** starts automatically when a new version is built in the
+   source repo. It downloads the candidate, checks its sha256, signs the manifest
+   and publishes it as a **pre-release**. Staging servers install it; hotels ignore
+   pre-releases.
+2. **Promote release** (Actions → Promote release → version) after testing on
+   staging: checks the signature and checksum again and marks the pre-release as the
+   latest release. The files stay byte-for-byte the tested ones. Hotels see it in the
+   admin UI within an hour.
+
+Both run in the protected `production` environment (main only). Published versions
+are never replaced and never go backwards.
 
 Settings this needs, all in environment `production`:
 

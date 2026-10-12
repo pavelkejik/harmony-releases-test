@@ -1,10 +1,12 @@
-name: Publish release
+name: Publish candidate
 
-# Publishes a release candidate that was tested on the lab:
+# Started automatically by the source repo's release workflow (or by hand):
 #   1. download the candidate assets from the source repo (GitHub App, read-only)
-#   2. check the tarball is byte-for-byte the one tested (sha256 input)
+#   2. check the tarball is byte-for-byte the candidate (sha256 input)
 #   3. sign the manifest (ssh-keygen -Y sign, namespace harmony-release)
-#   4. create the public GitHub release that harmony-update installs from
+#   4. publish it as a PRE-RELEASE: staging servers install it, hotels do not
+# After testing on staging, "Promote release" turns exactly these files into the
+# release hotels see. Nothing is rebuilt or re-signed.
 #
 # Runs only in the protected "production" environment (main branch only), the
 # only place that holds SIGNING_KEY. Releases are never replaced or downgraded.
@@ -16,7 +18,7 @@ on:
         description: "Version to publish (X.Y.Z)"
         required: true
       sha256:
-        description: "sha256 of harmony-X.Y.Z.tar.gz as tested on the lab"
+        description: "sha256 of harmony-X.Y.Z.tar.gz (from the candidate page)"
         required: true
 
 permissions:
@@ -74,7 +76,7 @@ jobs:
           gh release download "v$VERSION" --repo "$SOURCE_REPO" --dir dist \
             --pattern "harmony-$VERSION.tar.gz" --pattern "harmony-$VERSION.manifest.json"
           gh release view "v$VERSION" --repo "$SOURCE_REPO" --json body --jq .body \
-            | sed '/^\*\*Release candidate/,/^- commit:/d' > notes.md
+            | sed '/^\*\*\(Release candidate\|Candidate\)/,/^- commit:/d' > notes.md
 
       - name: Verify it is the tested candidate
         run: |
@@ -110,7 +112,7 @@ jobs:
           cd dist
           sha256sum "harmony-$VERSION.tar.gz" "harmony-$VERSION.manifest.json" \
             "harmony-$VERSION.manifest.json.sig" > SHA256SUMS
-          gh release create "v$VERSION" --title "Harmony $VERSION" --notes-file ../notes.md --latest \
+          gh release create "v$VERSION" --title "Harmony $VERSION (candidate)" --notes-file ../notes.md --prerelease \
             "harmony-$VERSION.tar.gz" "harmony-$VERSION.manifest.json" \
             "harmony-$VERSION.manifest.json.sig" SHA256SUMS
-          echo "Published v$VERSION ($EXPECTED_SHA256)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Published candidate v$VERSION ($EXPECTED_SHA256). After testing: Actions -> Promote release." >> "$GITHUB_STEP_SUMMARY"

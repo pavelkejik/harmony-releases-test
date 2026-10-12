@@ -1,0 +1,58 @@
+name: Promote release
+
+# Turns a tested candidate (pre-release) into the release hotels see.
+# The files and their signature stay exactly as tested on staging: this only
+# checks them once more and marks the release as the latest.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Candidate to promote (X.Y.Z), tested on staging"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+env:
+  VERSION: ${{ inputs.version }}
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    environment: production
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Is it a candidate newer than the latest release?
+        run: |
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::bad version"; exit 1; }
+          pre="$(gh release view "v$VERSION" --json isPrerelease --jq .isPrerelease)" \
+            || { echo "::error::v$VERSION is not published as a candidate"; exit 1; }
+          [ "$pre" = "true" ] || { echo "::error::v$VERSION is already a release"; exit 1; }
+          latest="$(gh release list --exclude-pre-releases --exclude-drafts --limit 100 \
+            --json tagName --jq '.[].tagName' | sed -n 's/^v\([0-9]*\.[0-9]*\.[0-9]*\)$/\1/p' \
+            | sort -V | tail -1)"
+          if [ -n "$latest" ] && [ "$(printf '%s\n%s\n' "$latest" "$VERSION" | sort -V | tail -1)" != "$VERSION" ]; then
+            echo "::error::$VERSION is not newer than the latest release $latest"; exit 1
+          fi
+
+      - name: Check signature and checksum of the published files
+        run: |
+          mkdir dist && cd dist
+          gh release download "v$VERSION" --pattern "harmony-$VERSION.*"
+          ssh-keygen -Y verify -f ../allowed_signers -I harmony-release -n harmony-release \
+            -s "harmony-$VERSION.manifest.json.sig" < "harmony-$VERSION.manifest.json"
+          want="$(python3 -c "import json; print(json.load(open('harmony-$VERSION.manifest.json'))['artifact']['sha256'])")"
+          echo "$want  harmony-$VERSION.tar.gz" | sha256sum -c -
+
+      - name: Promote
+        run: |
+          gh release edit "v$VERSION" --prerelease=false --latest --title "Harmony $VERSION"
+          echo "v$VERSION is now the latest release; hotels see it in the admin UI within an hour." >> "$GITHUB_STEP_SUMMARY"
