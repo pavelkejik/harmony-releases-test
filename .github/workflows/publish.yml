@@ -1,0 +1,105 @@
+name: Publish release
+
+# Publishes a release candidate that was tested on the lab:
+#   1. download the candidate assets from the source repo (read-only token)
+#   2. check the tarball is byte-for-byte the one tested (sha256 input)
+#   3. sign the manifest (ssh-keygen -Y sign, namespace harmony-release)
+#   4. create the public GitHub release that harmony-update installs from
+#
+# Runs only in the protected "production" environment (main branch only), the
+# only place that holds SIGNING_KEY. Releases are never replaced or downgraded.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (X.Y.Z)"
+        required: true
+      sha256:
+        description: "sha256 of harmony-X.Y.Z.tar.gz as tested on the lab"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+env:
+  SOURCE_REPO: ${{ vars.SOURCE_REPO || 'pavelkejik/harmony-v2-dev' }}
+  VERSION: ${{ inputs.version }}
+  EXPECTED_SHA256: ${{ inputs.sha256 }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check inputs and version order
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::bad version"; exit 1; }
+          echo "$EXPECTED_SHA256" | grep -Eq '^[0-9a-f]{64}$' || { echo "::error::bad sha256"; exit 1; }
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "::error::v$VERSION is already published (releases are never replaced)"; exit 1
+          fi
+          latest="$(gh release list --exclude-pre-releases --exclude-drafts --limit 100 \
+            --json tagName --jq '.[].tagName' | sed -n 's/^v\([0-9]*\.[0-9]*\.[0-9]*\)$/\1/p' \
+            | sort -V | tail -1)"
+          if [ -n "$latest" ] && [ "$(printf '%s\n%s\n' "$latest" "$VERSION" | sort -V | tail -1)" != "$VERSION" ]; then
+            echo "::error::$VERSION is older than the latest published $latest"; exit 1
+          fi
+
+      - name: Download candidate
+        env:
+          GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+        run: |
+          [ -n "$GH_TOKEN" ] || { echo "::error::SOURCE_REPO_TOKEN is not set"; exit 1; }
+          mkdir dist
+          gh release download "v$VERSION" --repo "$SOURCE_REPO" --dir dist \
+            --pattern "harmony-$VERSION.tar.gz" --pattern "harmony-$VERSION.manifest.json"
+          gh release view "v$VERSION" --repo "$SOURCE_REPO" --json body --jq .body \
+            | sed '/^\*\*Release candidate/,/^- commit:/d' > notes.md
+
+      - name: Verify it is the tested candidate
+        run: |
+          cd dist
+          actual="$(sha256sum "harmony-$VERSION.tar.gz" | awk '{print $1}')"
+          [ "$actual" = "$EXPECTED_SHA256" ] || { echo "::error::tarball sha256 $actual != tested $EXPECTED_SHA256"; exit 1; }
+          python3 - <<'PY'
+          import json, os
+          m = json.load(open(f"harmony-{os.environ['VERSION']}.manifest.json"))
+          assert m["product"] == "harmony", "not a Harmony manifest"
+          assert m["version"] == os.environ["VERSION"], "manifest version mismatch"
+          assert m["artifact"]["sha256"] == os.environ["EXPECTED_SHA256"], "manifest sha256 mismatch"
+          assert not m["commit"].endswith("-dirty"), "built from a dirty tree"
+          print("manifest OK:", m["version"], m["commit"])
+          PY
+
+      - name: Sign manifest
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: |
+          umask 077
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$SIGNING_KEY" > "$key"
+          ssh-keygen -q -Y sign -f "$key" -n harmony-release "dist/harmony-$VERSION.manifest.json"
+          ssh-keygen -Y verify -f allowed_signers -I harmony-release -n harmony-release \
+            -s "dist/harmony-$VERSION.manifest.json.sig" < "dist/harmony-$VERSION.manifest.json"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          sha256sum "harmony-$VERSION.tar.gz" "harmony-$VERSION.manifest.json" \
+            "harmony-$VERSION.manifest.json.sig" > SHA256SUMS
+          gh release create "v$VERSION" --title "Harmony $VERSION" --notes-file ../notes.md --latest \
+            "harmony-$VERSION.tar.gz" "harmony-$VERSION.manifest.json" \
+            "harmony-$VERSION.manifest.json.sig" SHA256SUMS
+          echo "Published v$VERSION ($EXPECTED_SHA256)" >> "$GITHUB_STEP_SUMMARY"

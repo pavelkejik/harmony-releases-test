@@ -1,0 +1,4 @@
+# Release signing keys trusted by harmony-update (ssh-keygen -Y verify, namespace harmony-release).
+# TEST KEYS (pavelkejik/harmony-releases-test) — replace with the production keys before moving to elkoep-dev.
+harmony-release namespaces="harmony-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEBjQGKZZjQ8jA6X1eLapzLlA8JNjW3ObUojAmardtRl
+harmony-release namespaces="harmony-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILp2h5wutQeciDPeaXKaTsS1CEbwkt7PVt3KzMCSFOaT
