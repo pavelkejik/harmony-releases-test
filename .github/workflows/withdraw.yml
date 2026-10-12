@@ -23,13 +23,21 @@ concurrency:
 
 jobs:
   withdraw:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: production
     env:
       GH_TOKEN: ${{ github.token }}
+      RELEASE_OPERATORS: ${{ vars.RELEASE_OPERATORS }}
+      TRIGGERING_ACTOR: ${{ github.triggering_actor }}
       VERSION: ${{ inputs.version }}
       REASON: ${{ inputs.reason }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Authorize human operator, including reruns
+        run: python3 scripts/release_checks.py operator
+
       - name: Withdraw
         run: |
           echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::bad version"; exit 1; }

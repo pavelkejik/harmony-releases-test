@@ -20,6 +20,15 @@ on:
       sha256:
         description: "sha256 of harmony-X.Y.Z.tar.gz"
         required: true
+      source_sha:
+        description: "Full source commit SHA"
+        required: true
+      run_attempt:
+        description: "Exact source run attempt"
+        required: true
+      artifact_id:
+        description: "Immutable release artifact ID"
+        required: true
       run_id:
         description: "Release run in the source repo that built it"
         required: true
@@ -35,9 +44,14 @@ env:
   SOURCE_REPO: ${{ vars.SOURCE_REPO || 'pavelkejik/harmony-v2-dev' }}
   VERSION: ${{ inputs.version }}
   EXPECTED_SHA256: ${{ inputs.sha256 }}
+  SOURCE_SHA: ${{ inputs.source_sha }}
+  SOURCE_RUN_ID: ${{ inputs.run_id }}
+  SOURCE_RUN_ATTEMPT: ${{ inputs.run_attempt }}
+  SOURCE_ARTIFACT_ID: ${{ inputs.artifact_id }}
 
 jobs:
   publish:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: production
     env:
@@ -72,29 +86,22 @@ jobs:
           repositories: ${{ env.SOURCE_NAME }}
           permission-actions: read
 
+      - name: Authorize the exact source run, gates and artifact
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: python3 scripts/release_checks.py provenance
+
       - name: Download the build
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-${{ inputs.version }}
+          artifact-ids: ${{ inputs.artifact_id }}
           path: dist
           repository: ${{ env.SOURCE_REPO }}
           run-id: ${{ inputs.run_id }}
           github-token: ${{ steps.app.outputs.token }}
 
-      - name: Check it is that build
-        run: |
-          cd dist
-          actual="$(sha256sum "harmony-$VERSION.tar.gz" | awk '{print $1}')"
-          [ "$actual" = "$EXPECTED_SHA256" ] || { echo "::error::sha256 $actual != $EXPECTED_SHA256"; exit 1; }
-          python3 - <<'PY'
-          import json, os
-          m = json.load(open(f"harmony-{os.environ['VERSION']}.manifest.json"))
-          assert m["product"] == "harmony", "not a Harmony manifest"
-          assert m["version"] == os.environ["VERSION"], "manifest version mismatch"
-          assert m["artifact"]["sha256"] == os.environ["EXPECTED_SHA256"], "manifest sha256 mismatch"
-          assert not m["commit"].endswith("-dirty"), "built from a dirty tree"
-          print("manifest OK:", m["version"], m["commit"])
-          PY
+      - name: Verify manifest identity and exact package bytes
+        run: python3 scripts/release_checks.py manifest
 
       - name: Sign manifest
         env:
@@ -118,14 +125,3 @@ jobs:
           gh release create "v$VERSION" --title "Harmony $VERSION (candidate)" --notes-file notes.md \
             --prerelease $files SHA256SUMS
           echo "Candidate v$VERSION published. After testing on staging: Actions -> Promote release." >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Remove older candidates
-        run: |
-          # One candidate waits for promotion at a time; older ones were never promoted.
-          for tag in $(gh release list --limit 100 --json tagName,isPrerelease,name \
-              --jq '.[] | select(.isPrerelease and (.name | endswith("(candidate)"))) | .tagName'); do
-            if [ "$tag" != "v$VERSION" ]; then
-              gh release delete "$tag" --yes --cleanup-tag
-              echo "Removed older candidate $tag" >> "$GITHUB_STEP_SUMMARY"
-            fi
-          done

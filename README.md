@@ -31,7 +31,7 @@ sha256sum harmony-X.Y.Z.tar.gz   # must equal artifact.sha256 in the manifest
 
 | Workflow | Started by | What it does |
 |---|---|---|
-| Publish candidate | the source repo's Release run | signs the build, publishes it as a candidate (pre-release) for staging and pilot hotels, removes older candidates |
+| Publish candidate | the source repo's Release run | signs the build, publishes it as a candidate (pre-release) for staging and pilot hotels; retains older candidates |
 | Promote release | a person, after testing on staging | checks signature and checksum, makes the candidate the latest release |
 | Withdraw release | a person, if a release turns out bad | servers stop offering it; servers running it keep it until the next release |
 
@@ -47,3 +47,11 @@ Settings in environment `production`:
 - variable `SOURCE_REPO` (default `pavelkejik/harmony-v2-dev`)
 
 `allowed_signers` lists the public keys servers trust (main and backup key).
+
+## Authorization and retries
+
+The publisher independently verifies the canonical source Release workflow on main, its exact run attempt, successful required gates, full source SHA and immutable artifact ID. The source tag is checked by the successful source publish job. Private branches cannot obtain signatures by dispatching arbitrary artifacts. Re-run all source jobs after a source failure; publisher retries use the original artifact and never rebuild it.
+
+Set production variable RELEASE_OPERATORS to a space/comma-separated list of human GitHub logins. Both the original actor and rerun actor must be allowed; App-origin Promote/Withdraw runs are refused. Production environment deployment branches must explicitly select main, and public main must be protected. The production signing key stays in this environment.
+
+Candidates are retained until a human withdraws them. A withdrawn identity cannot be promoted again. Withdraw on GitHub and deactivate its portal offer. Signatures bind package contents; release metadata and portal assignment remain trusted operational authorities for offers.
