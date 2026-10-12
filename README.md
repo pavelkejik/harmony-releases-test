@@ -30,7 +30,10 @@ sha256sum harmony-X.Y.Z.tar.gz   # must equal artifact.sha256 in the manifest
    latest release. The files stay byte-for-byte the tested ones. Hotels see it in the
    admin UI within an hour.
 
-Both run in the protected `production` environment (main only). Published versions
+3. **Withdraw release** if a problem shows up after promotion: servers stop
+   offering it at once; servers already running it keep it until the next release.
+
+All run in the protected `production` environment (main only). Published versions
 are never replaced and never go backwards.
 
 Settings this needs, all in environment `production`:

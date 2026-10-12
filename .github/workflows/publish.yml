@@ -116,3 +116,17 @@ jobs:
             "harmony-$VERSION.tar.gz" "harmony-$VERSION.manifest.json" \
             "harmony-$VERSION.manifest.json.sig" SHA256SUMS
           echo "Published candidate v$VERSION ($EXPECTED_SHA256). After testing: Actions -> Promote release." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove superseded candidates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # One candidate waits for promotion at a time; older ones were never
+          # promoted and are replaced by this one.
+          for tag in $(gh release list --limit 100 --json tagName,isPrerelease,name \
+              --jq '.[] | select(.isPrerelease and (.name | endswith("(candidate)"))) | .tagName'); do
+            if [ "$tag" != "v$VERSION" ]; then
+              gh release delete "$tag" --yes --cleanup-tag
+              echo "Removed superseded candidate $tag" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
