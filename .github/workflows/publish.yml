@@ -4,8 +4,8 @@ name: Publish candidate
 #   1. take the build from that run (GitHub App, read-only)
 #   2. check it is the build the run reported (sha256)
 #   3. sign the manifest (ssh-keygen -Y sign, namespace harmony-release)
-#   4. publish it as a candidate (pre-release): staging servers offer it,
-#      hotels do not see it
+#   4. publish it as a candidate (pre-release): staging servers offer it, a
+#      hotel only when Harmony Portal deploys it to that hotel (pilot)
 # "Promote release" later turns exactly these files into a release.
 #
 # Runs only in the protected "production" environment (main branch), the only

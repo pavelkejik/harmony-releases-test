@@ -1,6 +1,7 @@
 name: Promote release
 
-# Turns a tested candidate (pre-release) into the release hotels see.
+# Turns a tested candidate (pre-release) into the latest release; Harmony
+# Portal then decides which hotels are offered it.
 # The files and their signature stay exactly as tested on staging: this only
 # checks them once more and marks the release as the latest.
 

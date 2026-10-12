@@ -31,7 +31,7 @@ sha256sum harmony-X.Y.Z.tar.gz   # must equal artifact.sha256 in the manifest
 
 | Workflow | Started by | What it does |
 |---|---|---|
-| Publish candidate | the source repo's Release run | signs the build, publishes it as a candidate (pre-release) for staging, removes older candidates |
+| Publish candidate | the source repo's Release run | signs the build, publishes it as a candidate (pre-release) for staging and pilot hotels, removes older candidates |
 | Promote release | a person, after testing on staging | checks signature and checksum, makes the candidate the latest release |
 | Withdraw release | a person, if a release turns out bad | servers stop offering it; servers running it keep it until the next release |
 
