@@ -1,15 +1,23 @@
 # harmony-releases-test
 
-Test channel for publishing and signing iNELS Harmony releases. Servers install
-releases from here with `harmony-update` (`RELEASES_REPO` in `/etc/harmony/harmony.conf`).
+Test channel for signed iNELS Harmony releases. Servers install from here with
+`harmony-update` (`RELEASES_REPO` in `/etc/harmony/harmony.conf`).
 
-Every release has three files:
+## New server
+
+```sh
+curl -fsSL https://github.com/pavelkejik/harmony-releases-test/releases/latest/download/install.sh \
+  | sudo HARMONY_RELEASES_REPO=pavelkejik/harmony-releases-test bash
+```
+
+## Files of a release
 
 | File | What it is |
 |---|---|
 | `harmony-X.Y.Z.tar.gz` | install/upgrade package |
 | `harmony-X.Y.Z.manifest.json` | version, source commit, sha256 of the package |
 | `harmony-X.Y.Z.manifest.json.sig` | signature of the manifest (`ssh-keygen -Y`, namespace `harmony-release`) |
+| `install.sh` | installer for new servers |
 
 Verify by hand:
 
@@ -19,29 +27,23 @@ ssh-keygen -Y verify -f allowed_signers -I harmony-release -n harmony-release \
 sha256sum harmony-X.Y.Z.tar.gz   # must equal artifact.sha256 in the manifest
 ```
 
-## Publishing
+## Workflows
 
-1. **Publish candidate** starts automatically when a new version is built in the
-   source repo. It downloads the candidate, checks its sha256, signs the manifest
-   and publishes it as a **pre-release**. Staging servers install it; hotels ignore
-   pre-releases.
-2. **Promote release** (Actions → Promote release → version) after testing on
-   staging: checks the signature and checksum again and marks the pre-release as the
-   latest release. The files stay byte-for-byte the tested ones. Hotels see it in the
-   admin UI within an hour.
+| Workflow | Started by | What it does |
+|---|---|---|
+| Publish candidate | the source repo's Release run | signs the build, publishes it as a candidate (pre-release) for staging, removes older candidates |
+| Promote release | a person, after testing on staging | checks signature and checksum, makes the candidate the latest release |
+| Withdraw release | a person, if a release turns out bad | servers stop offering it; servers running it keep it until the next release |
 
-3. **Withdraw release** if a problem shows up after promotion: servers stop
-   offering it at once; servers already running it keep it until the next release.
+All run in the protected `production` environment (main only). Published
+versions are never replaced and never go backwards.
 
-All run in the protected `production` environment (main only). Published versions
-are never replaced and never go backwards.
+Settings in environment `production`:
 
-Settings this needs, all in environment `production`:
+- secret `SIGNING_KEY`: the private signing key
+- secret `RELEASE_APP_PRIVATE_KEY`, variable `RELEASE_APP_CLIENT_ID`: the release
+  GitHub App (owned by the account/org, not a person), used to read the build from
+  the source repo
+- variable `SOURCE_REPO` (default `pavelkejik/harmony-v2-dev`)
 
-- secret `SIGNING_KEY` — private signing key
-- secret `RELEASE_APP_PRIVATE_KEY` and variable `RELEASE_APP_CLIENT_ID` — the release
-  GitHub App (owned by the account/org, permission Contents: read-only, installed
-  only on the source repo). The workflow gets a 1-hour token from it; no personal
-  token is involved.
-- optional variable `SOURCE_REPO_NAME` (default `harmony-v2-dev`, same owner)
-`allowed_signers` lists the public keys servers trust (main + backup key).
+`allowed_signers` lists the public keys servers trust (main and backup key).
