@@ -1,7 +1,7 @@
 name: Publish release
 
 # Publishes a release candidate that was tested on the lab:
-#   1. download the candidate assets from the source repo (read-only token)
+#   1. download the candidate assets from the source repo (GitHub App, read-only)
 #   2. check the tarball is byte-for-byte the one tested (sha256 input)
 #   3. sign the manifest (ssh-keygen -Y sign, namespace harmony-release)
 #   4. create the public GitHub release that harmony-update installs from
@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_REPO: ${{ vars.SOURCE_REPO || 'pavelkejik/harmony-v2-dev' }}
+  SOURCE_REPO: ${{ github.repository_owner }}/${{ vars.SOURCE_REPO_NAME || 'harmony-v2-dev' }}
   VERSION: ${{ inputs.version }}
   EXPECTED_SHA256: ${{ inputs.sha256 }}
 
@@ -54,11 +54,22 @@ jobs:
             echo "::error::$VERSION is older than the latest published $latest"; exit 1
           fi
 
+      # Short-lived (1 h) token of the release GitHub App: Contents read-only, only
+      # on the source repo. Owned by the account/org, not by a person; nothing expires.
+      - name: Token for the source repo
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ vars.SOURCE_REPO_NAME || 'harmony-v2-dev' }}
+          permission-contents: read
+
       - name: Download candidate
         env:
-          GH_TOKEN: ${{ secrets.SOURCE_REPO_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
-          [ -n "$GH_TOKEN" ] || { echo "::error::SOURCE_REPO_TOKEN is not set"; exit 1; }
           mkdir dist
           gh release download "v$VERSION" --repo "$SOURCE_REPO" --dir dist \
             --pattern "harmony-$VERSION.tar.gz" --pattern "harmony-$VERSION.manifest.json"

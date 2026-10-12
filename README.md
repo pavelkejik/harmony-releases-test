@@ -27,7 +27,12 @@ the candidate from the source repo, checks the sha256, signs the manifest and
 creates the release. Published releases are never replaced; a newer version is
 the only way forward.
 
-Settings this needs: environment `production` with secret `SIGNING_KEY` (private
-signing key) and secret `SOURCE_REPO_TOKEN` (fine-grained token, Contents: read-only,
-source repo only). Optional variable `SOURCE_REPO` (default `pavelkejik/harmony-v2-dev`).
+Settings this needs, all in environment `production`:
+
+- secret `SIGNING_KEY` — private signing key
+- secret `RELEASE_APP_PRIVATE_KEY` and variable `RELEASE_APP_CLIENT_ID` — the release
+  GitHub App (owned by the account/org, permission Contents: read-only, installed
+  only on the source repo). The workflow gets a 1-hour token from it; no personal
+  token is involved.
+- optional variable `SOURCE_REPO_NAME` (default `harmony-v2-dev`, same owner)
 `allowed_signers` lists the public keys servers trust (main + backup key).
