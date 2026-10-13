@@ -35,23 +35,10 @@ def check_run(run, repo, commit, attempt):
 
 
 def check_jobs(jobs):
-    required = {
-        "check", "build", "publish",
-        "ci / Lint, tests, SQL check, secrets",
-        "ci / Database bootstrap + migrations (fresh, twice)",
-        "ci / Build gateway drivers",
-        "upgrade-tests / plan", "upgrade-tests / build",
-        "upgrade-tests / fresh", "upgrade-tests / interrupt",
-    }
-    # A green but accidentally reduced matrix must never authorize signing.
-    fleet_repo = "elkoep-dev/harmony-releases"
-    required.update(f"upgrade-tests / from-release {version} {fleet_repo}"
-                    for version in ("1.0.4", "1.0.5", "1.0.7", "1.0.8", "1.0.10", "1.0.11"))
-    required.add(f"upgrade-tests / chain 1.0.4 1.0.11 {fleet_repo}")
-    names = {j.get("name") for j in jobs}
-    require(required <= names, f"missing required gates: {sorted(required - names)}")
+    # The source run's "gate" job checks that the complete release test set ran and passed.
+    require(any(j.get("name") == "gate" for j in jobs), "the source run has no release gate")
     require(all(j.get("status") == "completed" and j.get("conclusion") == "success" for j in jobs),
-            "a source gate failed, was cancelled or was skipped")
+            "a source job failed, was cancelled or was skipped")
 
 
 def check_artifact(artifact, repo, run_id, attempt, artifact_id, commit, version):

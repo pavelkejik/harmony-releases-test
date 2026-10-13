@@ -54,16 +54,12 @@ class AuthorizationTests(unittest.TestCase):
                 checks.check_candidate(release)
 
     def test_skipped_gate_and_missing_gate(self):
-        names = ["check", "build", "publish", "ci / Lint, tests, SQL check, secrets",
-                 "ci / Database bootstrap + migrations (fresh, twice)", "ci / Build gateway drivers",
-                 "upgrade-tests / plan", "upgrade-tests / build", "upgrade-tests / fresh", "upgrade-tests / interrupt"]
-        names.extend(f"upgrade-tests / from-release {version} elkoep-dev/harmony-releases"
-                     for version in ("1.0.4", "1.0.5", "1.0.7", "1.0.8", "1.0.10", "1.0.11"))
-        names.append("upgrade-tests / chain 1.0.4 1.0.11 elkoep-dev/harmony-releases")
-        jobs = [{"name": n, "status": "completed", "conclusion": "success"} for n in names]
+        jobs = [{"name": n, "status": "completed", "conclusion": "success"}
+                for n in ("check", "build", "gate", "publish", "upgrade-tests / fresh")]
         checks.check_jobs(jobs)
-        missing_each = [[job for job in jobs if job['name'] != name] for name in names]
-        for bad in [*missing_each, [*jobs, {"name": "extra", "status": "completed", "conclusion": "skipped"}]]:
+        for bad in ([job for job in jobs if job["name"] != "gate"],
+                    [*jobs, {"name": "extra", "status": "completed", "conclusion": "skipped"}],
+                    [*jobs[:-1], {"name": "upgrade-tests / fresh", "status": "completed", "conclusion": "failure"}]):
             with self.assertRaises(checks.Rejected):
                 checks.check_jobs(copy.deepcopy(bad))
 
