@@ -43,6 +43,11 @@ def check_jobs(jobs):
         "upgrade-tests / plan", "upgrade-tests / build",
         "upgrade-tests / fresh", "upgrade-tests / interrupt",
     }
+    # A green but accidentally reduced matrix must never authorize signing.
+    fleet_repo = "elkoep-dev/harmony-releases"
+    required.update(f"upgrade-tests / from-release {version} {fleet_repo}"
+                    for version in ("1.0.4", "1.0.5", "1.0.7", "1.0.8", "1.0.10", "1.0.11"))
+    required.add(f"upgrade-tests / chain 1.0.4 1.0.11 {fleet_repo}")
     names = {j.get("name") for j in jobs}
     require(required <= names, f"missing required gates: {sorted(required - names)}")
     require(all(j.get("status") == "completed" and j.get("conclusion") == "success" for j in jobs),
